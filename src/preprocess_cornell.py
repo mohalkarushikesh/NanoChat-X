@@ -1,8 +1,11 @@
 import os
+import re
 
 BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 DATASET_DIR = os.path.join(BASE_DIR, "data", "cornell_movie_dialogs")
 OUTPUT_PATH = os.path.join(BASE_DIR, "data", "data.txt")
+
+print("dataset dir:", DATASET_DIR)
 
 # Load movie lines
 lines_path = os.path.join(DATASET_DIR, "movie_lines.txt")
@@ -12,7 +15,7 @@ conversations_path = os.path.join(DATASET_DIR, "movie_conversations.txt")
 id2line = {}
 with open(lines_path, encoding="utf-8", errors="ignore") as f:
     for line in f:
-        parts = line.split("+++$+++")
+        parts = line.split("\t")          # tab-separated, not +++$+++
         if len(parts) == 5:
             line_id = parts[0].strip()
             text = parts[4].strip()
@@ -21,9 +24,10 @@ with open(lines_path, encoding="utf-8", errors="ignore") as f:
 pairs = []
 with open(conversations_path, encoding="utf-8", errors="ignore") as f:
     for line in f:
-        parts = line.split("+++$+++")
+        parts = line.split("\t")          # tab-separated
         if len(parts) == 4:
-            line_ids = eval(parts[3].strip())  # list of line IDs
+            # IDs look like: ['L194' 'L195' 'L196'] — space-separated, no commas
+            line_ids = re.findall(r"L\d+", parts[3])
             for i in range(len(line_ids) - 1):
                 input_line = id2line.get(line_ids[i], "")
                 target_line = id2line.get(line_ids[i+1], "")
