@@ -59,7 +59,7 @@ Later, you can preprocess the Cornell Movie Dialogs corpus into Q→A pairs and 
 Run:
 
 ```bash
-python src/train.py
+python -m src.train
 ```
 
 This trains the `NanoTransformer` on your dataset and saves a checkpoint (`nanochat_model.pt`).
@@ -68,7 +68,7 @@ This trains the `NanoTransformer` on your dataset and saves a checkpoint (`nanoc
 Run:
 
 ```bash
-python src/chat.py
+python -m src.chat
 ```
 
 You’ll enter an interactive loop:
