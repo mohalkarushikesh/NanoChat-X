@@ -1,0 +1,150 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>NanoChat-X — Text Generation Console</title>
+  <meta name="description" content="Web console for NanoChat-X, a from-scratch causal GPT." />
+
+  <!-- Montserrat (used across the site, per design spec). Degrades to a
+       USWDS-style system stack if the network blocks Google Fonts. -->
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Montserrat:ital,wght@0,400;0,500;0,600;0,700;1,400&display=swap" rel="stylesheet" />
+
+  <link rel="stylesheet" href="/static/styles.css" />
+</head>
+<body>
+  <a class="usa-skipnav" href="#main-content">Skip to main content</a>
+
+  <!-- ============================== Header =============================== -->
+  <header class="usa-header" role="banner">
+    <div class="usa-header__inner">
+      <div class="usa-logo">
+        <span class="usa-logo__mark" aria-hidden="true">◧</span>
+        <div>
+          <em class="usa-logo__text">NanoChat-X</em>
+          <span class="usa-logo__subtext">Text Generation Console</span>
+        </div>
+      </div>
+      <nav class="usa-nav" aria-label="Primary">
+        <a class="usa-nav__link" href="#generate">Generate</a>
+        <a class="usa-nav__link" href="#about">About</a>
+        <a class="usa-nav__link" href="/docs">API</a>
+      </nav>
+    </div>
+  </header>
+
+  <main id="main-content">
+    <!-- =============================== Hero ============================== -->
+    <section class="hero">
+      <div class="grid-container">
+        <span class="usa-tag">Model Console</span>
+        <h1 class="hero__title">Generate text with a from-scratch GPT</h1>
+        <p class="hero__lead">
+          NanoChat-X is a small, hand-written causal transformer trained entirely on
+          your machine. Enter a prompt and it continues the text one token at a time.
+        </p>
+        <div id="model-status" class="model-status" role="status" aria-live="polite">
+          <span class="model-status__dot"></span>
+          <span class="model-status__text">Checking model status…</span>
+        </div>
+      </div>
+    </section>
+
+    <!-- ============================= Generator =========================== -->
+    <section id="generate" class="section">
+      <div class="grid-container grid-2">
+        <!-- Controls -->
+        <form id="generate-form" class="usa-card" novalidate>
+          <h2 class="usa-card__heading">Prompt</h2>
+
+          <label class="usa-label" for="prompt">Starting text</label>
+          <span class="usa-hint" id="prompt-hint">The model will continue from here.</span>
+          <textarea class="usa-textarea" id="prompt" name="prompt" rows="5"
+            aria-describedby="prompt-hint" placeholder="The thing is "></textarea>
+
+          <fieldset class="usa-fieldset">
+            <legend class="usa-legend">Decoding settings</legend>
+
+            <div class="control-row">
+              <label class="usa-label" for="max_new_tokens">Max new tokens</label>
+              <div class="control-input">
+                <input type="range" id="max_new_tokens" min="10" max="600" step="10" value="200" />
+                <output for="max_new_tokens" id="max_new_tokens-out">200</output>
+              </div>
+            </div>
+
+            <div class="control-row">
+              <label class="usa-label" for="temperature">Temperature</label>
+              <div class="control-input">
+                <input type="range" id="temperature" min="0.1" max="1.5" step="0.05" value="0.8" />
+                <output for="temperature" id="temperature-out">0.80</output>
+              </div>
+              <span class="usa-hint">Higher = more random.</span>
+            </div>
+
+            <div class="control-row">
+              <label class="usa-label" for="top_k">Top-k</label>
+              <div class="control-input">
+                <input type="range" id="top_k" min="0" max="200" step="1" value="40" />
+                <output for="top_k" id="top_k-out">40</output>
+              </div>
+              <span class="usa-hint">0 disables top-k filtering.</span>
+            </div>
+          </fieldset>
+
+          <div class="usa-button-group">
+            <button type="submit" class="usa-button" id="generate-btn">Generate</button>
+            <button type="button" class="usa-button usa-button--outline" id="clear-btn">Clear</button>
+          </div>
+        </form>
+
+        <!-- Output -->
+        <div class="usa-card output-card">
+          <div class="output-card__head">
+            <h2 class="usa-card__heading">Output</h2>
+            <button type="button" class="usa-button usa-button--unstyled" id="copy-btn" hidden>Copy</button>
+          </div>
+
+          <div id="alert-slot" aria-live="polite"></div>
+
+          <div id="output" class="output" aria-live="polite">
+            <p class="output__placeholder">Generated text will appear here.</p>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ============================== About ============================== -->
+    <section id="about" class="section section--alt">
+      <div class="grid-container">
+        <h2>About this model</h2>
+        <p class="measure">
+          NanoChat-X is a decoder-only transformer built from scratch in PyTorch — token
+          and positional embeddings, multi-head <strong>causal</strong> self-attention,
+          pre-LayerNorm residual blocks and a weight-tied language-model head. It is a
+          learning project, so outputs reflect a small model trained on a local corpus,
+          not a production assistant.
+        </p>
+        <ul id="model-facts" class="usa-list"></ul>
+      </div>
+    </section>
+  </main>
+
+  <!-- ============================== Footer =============================== -->
+  <footer class="usa-footer" role="contentinfo">
+    <div class="grid-container usa-footer__inner">
+      <div>
+        <p class="usa-footer__logo">NanoChat-X</p>
+        <p class="usa-footer__note">A from-scratch causal GPT · learning project</p>
+      </div>
+      <p class="usa-footer__meta">
+        Clean, accessible interface following the USWDS design system.
+      </p>
+    </div>
+  </footer>
+
+  <script src="/static/app.js"></script>
+</body>
+</html>
