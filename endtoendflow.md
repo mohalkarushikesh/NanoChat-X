@@ -1,427 +1,229 @@
-The repository is TaxPilot, a Python multi-agent tax-preparation copilot for Indian income tax returns. Its core design is: LLMs read and explain documents; a deterministic Python engine computes the actual rupee values and attaches the rule behind each figure; the LangGraph pipeline pauses for human review when audited thresholds or unresolved facts need attention. The entrypoint is the FastAPI app in `src/taxpilot/api/main.py`, which serves the static web UI in `web/` and exposes the JSON API.
+## What this is
 
-The real execution path is:
+NanoChat-X is a **minimal, from-scratch causal transformer** (decoder-only GPT) built in PyTorch for educational purposes. It trains on plain text files with no pretrained weights or external dependencies, making every component visible and learnable. The model includes a built-in web UI for interactive text generation and supports multiple tokenization strategies.
 
-1. HTTP request enters FastAPI.
-2. `pipeline.prepare()` builds a LangGraph workflow and runs it.
-3. Document ingestion loads files from disk or inline payloads.
-4. Each document is classified, extracted, normalized, and fed into a `TaxState`.
-5. The graph does:
-   - intake guardrail
-   - extraction
-   - classification
-   - deduction research via BM25 knowledge retrieval
-   - deterministic tax computation
-   - audit scoring
-   - optional human review interrupt
-   - report generation
-   - guardrails
-   - finalization
-6. The API returns a `ReturnResponse` with the final tax return, report, citations, audit, guardrail results, and review metadata.
+### Stack
+- **Language(s):** Python (66%), JavaScript (8%), HTML (10%), CSS (15%)
+- **Framework / runtime:** PyTorch + FastAPI + Uvicorn
+- **Notable libraries:** PyTorch (model & training), FastAPI (web server), Pydantic (API validation), NumPy (tensor ops)
 
-Start-to-finish file and code map
+---
 
-- `pyproject.toml`
-  - Declares the project as `taxpilot`
-  - Scripts:
-    - `tax-ingest = "taxpilot.knowledge.ingest:main"`
-    - `tax-api = "taxpilot.api.main:run"`
-  - Dependencies:
-    - `langgraph`
-    - `fastapi`
-    - `uvicorn`
-    - `anthropic`
-    - `pydantic`, `pydantic-settings`, `python-dotenv`
-    - optional OCR extras for PDFs/images
+## How it's organized
 
-- `src/taxpilot/config.py`
-  - `Settings` reads `.env`
-  - Controls:
-    - `llm_provider` = `"anthropic"` or `"gemini"`
-    - `tax_year` = 2024
-    - `corpus_dir`, `documents_dir`
-    - review thresholds
-    - feature flags: `enable_rag`, `enable_audit`, `enable_review`, `enable_guardrails`
-  - `get_settings()` is a cached singleton configuration access point.
+```
+NanoChat-X/
+├── src/
+│   ├── model.py          Core transformer architecture (NanoGPT class)
+│   ├── tokenizer.py      CharTokenizer & WordTokenizer implementations
+│   ├── config.py         GPTConfig & TrainConfig dataclasses
+│   ├── data.py           Corpus class for train/val batching
+│   ├── train.py          Training loop with AdamW, warmup, cosine LR
+│   ├── sample.py         One-shot text generation from checkpoint
+│   ├── chat.py           Interactive prompt-reply loop
+│   ├── server.py         FastAPI web server + JSON API
+│   ├── inference.py      Shared checkpoint loading
+│   └── preprocess_cornell.py  Optional data preprocessing
+├── web/
+│   ├── index.html        USWDS-styled SPA with controls
+│   ├── app.js            Frontend logic (API calls, slider binding)
+│   └── styles.css        USWDS design tokens + custom styling
+├── tests/
+│   └── test_nanochat.py  Pytest suite (shapes, causal mask, loss decrease)
+├── data/
+│   ├── data.txt          Default training corpus
+│   └── cornell_movie_dialogs/  Optional conversation data
+└── utils/
+    └── helpers.py        LR schedule, logging, CSV logger
+```
 
-- `src/taxpilot/models.py`
-  - This is the schema layer shared across the system.
-  - Key classes:
-    - `SourceDocument`
-    - `ExtractionResult`
-    - `ExtractedField`
-    - `TaxpayerProfile`
-    - `IncomeItem`
-    - `DeductionCandidate`
-    - `Citation`
-    - `TaxReturn`
-    - `AuditRisk`
-    - `ReviewItem`
-    - `Correction`
-    - `GuardrailOutcome`
-    - `TraceStep`
-    - `ReturnResponse`
-  - Important invariant: money is carried as integers in whole rupees; no LLM output is allowed to become an actual tax figure.
+## How it fits together
 
-- `src/taxpilot/api/main.py`
-  - `PrepareRequest` and `ResumeRequest` define the API schema.
-  - `lifespan()` runs when the app starts:
-    - `get_settings()`
-    - `setup_logging()`
-    - `enable_system_trust_store()`
-    - `pipeline.get_graph()`
-  - App mounts the web UI at `/static` and serves `index.html` at `/`
-  - Routes:
-    - `GET /health`
-    - `POST /prepare`
-    - `GET /pending/{thread_id}`
-    - `POST /resume`
-  - `_inline_documents()` converts incoming JSON docs into `SourceDocument` entries.
+**The end-to-end data flow:**
 
-- `src/taxpilot/graph/pipeline.py`
-  - This is the public orchestration layer.
-  - `prepare(documents=None, documents_dir=None, thread_id=None, regime=None, use_llm=True)`
-    - If no docs passed, it resolves `documents_dir` from settings and calls `load_documents(directory)`.
-    - `graph = graph or get_graph()`
-    - `thread_id = thread_id or uuid.uuid4().hex`
-    - Runs:
-      - `graph.invoke(initial_state(documents, regime or "", use_llm), config=_config(thread_id))`
-    - Converts graph output to `ReturnResponse` via `_to_response(...)`
-  - `resume(thread_id, corrections=...)`
-    - Reads existing graph state using `graph.get_state(config)`
-    - Calls `graph.invoke(Command(resume=payload), config=config)`
-  - `pending_review(thread_id)`
-    - Inspects LangGraph interrupts and returns the review payload.
-  - `_to_response()` packages:
-    - `tax_return`
-    - `audit`
-    - `report`
-    - `guardrails`
-    - `awaiting_review`
-    - `review_items`
-    - `trace`
-    - token counts and latency
+1. **Input → Tokenization** (`tokenizer.py`): Raw text is converted to token IDs via `CharTokenizer.encode()` (character-level, fully reversible) or `WordTokenizer.encode()` (word-level with `<unk>` fallback).
 
-- `src/taxpilot/graph/builder.py`
-  - This compiles the actual workflow graph.
-  - `build_graph()` adds nodes:
-    - guardrail_intake
-    - extract
-    - classify
-    - research
-    - calculate
-    - summarize
-    - audit
-    - review_gate
-    - report
-    - guardrail_output
-    - finalize
-  - `after_intake(state)`:
-    - if `state["blocked"]`, route to `finalize`
-    - otherwise route to `extract`
-  - `after_review(state)`:
-    - if `state["recompute"]`, route back to `calculate`
-    - otherwise route to `report`
-  - `get_graph()` is the process-wide cached compiled graph.
-  - The graph uses `MemorySaver` with a custom `JsonPlusSerializer` so pydantic models survive a review resume.
+2. **Token IDs → Embeddings** (`model.py`, `NanoGPT.forward`): Each token ID is looked up in `wte` (token embedding), positions are looked up in `wpe` (positional embedding), and the two are summed and passed through dropout.
 
-- `src/taxpilot/graph/state.py`
-  - Defines `TaxState` as a `TypedDict`.
-  - Fields are populated across the run:
-    - `documents`
-    - `extractions`
-    - `profile`
-    - `income`
-    - `regime_override`
-    - `use_llm`
-    - `deductions`
-    - `tax_return`
-    - `audit`
-    - `review_required`
-    - `classify_notes`
-    - `review_items`
-    - `reviewed`
-    - `corrections`
-    - `recompute`
-    - `report`
-    - `llm_summary`
-    - `guardrails`
-    - `blocked`
-    - `block_message`
-    - `trace`
-    - `input_tokens`
-    - `output_tokens`
-  - `initial_state(...)` seeds all empty lists and defaults.
+3. **Embeddings → Transformer blocks** (`model.py`): The combined embedding flows through N transformer blocks. Each block applies:
+   - `LayerNorm` → `CausalSelfAttention` (multi-head, causal mask blocks future attention) → residual add
+   - `LayerNorm` → `MLP` (4× feed-forward) → residual add
 
-Exact execution sequence
+4. **Transformer output → Logits** (`model.py`): A final `LayerNorm` is applied, then logits are projected via the weight-tied `lm_head` (sharing weights with `wte`).
 
-1. App bootstrap
-   - `tax-api` entry runs `taxpilot.api.main:run()`
-   - `run()` starts uvicorn on the configured host/port.
-   - At startup, `lifespan()` compiles the graph as a one-time cost.
+5. **Training split** (`train.py`):
+   - **Loss**: Cross-entropy between predicted logits and ground-truth next token, optimized with AdamW (weight decay on 2D+ params only)
+   - **Schedule**: Warmup for `warmup_iters`, then cosine decay to `min_lr`
+   - **Stability**: Gradient clipping, gradient accumulation, mixed precision (auto on CUDA)
+   - **Checkpointing**: Best validation checkpoint saved; resume-capable
 
-2. Prepare request
-   - Client POSTs to `/prepare`
-   - Request may contain:
-     - `documents` inline
-     - `documents_dir`
-     - `thread_id`
-     - `regime` override
-     - `use_llm`
-   - If `documents` is missing, the app loads files from `settings.documents_dir`.
+6. **Generation split** (`model.py`, `generate()`):
+   - Start with prompt tokens; autoregressively sample one token per step
+   - Apply temperature scaling, top-k filtering, softmax, and multinomial sampling
+   - Append new token, crop context to `block_size`, loop
 
-3. Document ingestion
-   - `src/taxpilot/intake/loader.py`
-   - `load_documents(directory)`
-     - iterates directory entries
-     - calls `load_document(path)`
-     - `load_document()` calls `extract_text(path)` from `intake/ocr.py`
-   - `extract_text(path)`
-     - `.txt/.md/.json/.csv` -> read as plain text
-     - `.pdf` -> uses `pypdf` if installed
-     - images -> OCR via `pytesseract` + `PIL`
-     - raises `OcrUnavailableError` if OCR support is missing for scanned files
-   - `classify_doc_type(text, filename)`:
-     - checks a priority marker list like:
-       - “form 16”
-       - “form 26as”
-       - “80c”
-       - “interest certificate”
-       - “rent receipt”
-       - “home loan”
-     - returns a `DocType` enum
-   - Constructed object:
-     - `SourceDocument(id, filename, doc_type, text, ocr_confidence)`
-   - This yields a list of document objects as the first concrete data payload.
+7. **Inference paths**:
+   - **CLI sample** (`sample.py`): Load checkpoint, encode prompt, generate, decode output
+   - **CLI chat** (`chat.py`): Interactive loop; formats prompt as `"<user> -> "` to nudge Cornell-trained models toward replies
+   - **Web server** (`server.py` + `web/`): FastAPI loads checkpoint at startup; frontend posts JSON to `/api/generate`, gets `{prompt, completion, generated}` back
 
-4. Initial graph state
-   - `initial_state(documents, regime_override, use_llm)` populates `TaxState`
-   - The graph is invoked with that state and a thread checkpoint config.
+---
 
-5. Guardrail intake
-   - `guardrail_intake_node` in `src/taxpilot/graph/nodes.py`
-   - This calls the guardrail pipeline from `src/taxpilot/guardrails/pipeline.py`
-   - `Guardrails.check_documents(...)`
-     - rejects empty submissions
-     - rejects oversized document sets
-     - blocks text injection patterns
-     - inventories PII
-     - optionally calls LLM intake review to verify the submission is actually tax documents
-   - If blocked:
-     - `after_intake` routes to `finalize`
-     - the pipeline ends early.
+## How to run it
 
-6. Extraction
-   - `extract_node` in `graph/nodes.py`
-   - It uses the extractor in `src/taxpilot/extraction/extractor.py`
-   - `Extractor.extract(doc)`
-     - if LLM available: `_extract_llm(doc)`
-     - else: `_extract_heuristic(doc)`
-   - `_extract_llm()`
-     - builds a prompt with document type + text
-     - calls `self.llm.complete_json(...)`
-     - expects a JSON schema with `fields`
-     - canonicalizes each label with `canonicalize()`
-     - coerces numeric strings with `_coerce()`
-     - creates `ExtractedField(name, value, confidence, source_doc, box)`
-   - `_extract_heuristic()`
-     - scans each line with regex:
-       - `_LINE` matches `Label: value`
-       - `_NUMBER` detects money-like strings
-     - turns values into numeric floats where applicable, otherwise leaves them as text
-   - Output is an `ExtractionResult(doc_id, doc_type, fields)` stored in `state["extractions"]`
+```bash
+# Install dependencies
+pip install -r requirements.txt
 
-7. Classification
-   - `classify_node` in `graph/nodes.py`
-   - Uses the extraction results and documents to determine:
-     - age category
-     - residential status
-     - regime preference
-   - It fills `TaxpayerProfile`:
-     - `AgeCategory.BELOW_60`, `SENIOR`, `SUPER_SENIOR`
-     - `residential_status` = `resident` or `non_resident`
-     - `regime_preference` = `"auto"`, `"old"`, or `"new"`
-   - This classification can also emit `ReviewItem`s if the facts are ambiguous.
+# 1. Train (creates out/ckpt.pt + out/tokenizer.json + out/loss.csv)
+python -m src.train                                      # char tokenizer, defaults
+python -m src.train --max_iters 3000 --n_layer 6 --n_embd 256
+python -m src.train --tokenizer word --block_size 64
+python -m src.train --resume                             # continue from checkpoint
 
-8. Research / deduction proposal
-   - `research_node` in `graph/nodes.py`
-   - It integrates with:
-     - `src/taxpilot/knowledge/retriever.py`
-     - `src/taxpilot/knowledge/store.py`
-     - `src/taxpilot/knowledge/corpus_loader.py`
-   - `get_retriever()` builds a BM25 retriever over the corpus under `data/corpus/`
-   - `Retriever.retrieve_multi(queries)`:
-     - runs multiple queries against the BM25 store
-     - deduplicates by passage
-     - ranks by relevance
-     - returns `Passage` objects
-   - `format_context(passages)` prints numbered context blocks with `rule_ids` and the underlying text
-   - The model proposes deductions as `DeductionCandidate` entries:
-     - `name`
-     - `kind` (`CHAPTER_VIA`, `HOUSE_PROPERTY`, `SALARY_EXEMPTION`)
-     - `amount`
-     - `citation`
-     - `rationale`
-     - `confidence`
-     - `needs_review`
-     - `grounded`
-   - This is where the “grounding” concept is enforced:
-     - the rule must be present in the corpus
-     - the citation must resolve to a known rule
-     - the output guardrails later verify it
+# 2. Generate from CLI
+python -m src.sample --prompt "The thing is " --max_new_tokens 200 --top_k 40
+python -m src.sample --num_samples 3 --temperature 0.5
 
-9. Deterministic tax computation
-   - `calculate_node` in `graph/nodes.py`
-   - Calls `src/taxpilot/calc/engine.py`
-   - `compute(profile, income, deductions, tax_year=2024)`
-     - sums salary, interest, other income
-     - sums TDS
-     - computes both old and new regimes
-     - chooses:
-       - forced regime if `profile.regime_preference` is set
-       - otherwise the lower tax under “auto”
-   - Important helpers:
-     - `slab_tax()`
-     - `_slabs_for()`
-     - `_standard_deduction()`
-     - `_rebate_87a()`
-     - `_surcharge()`
-     - `_chapter_via()`
-     - `_house_property_loss()`
-   - `TaxReturn` is built by `_build_return(...)`
-   - Every tax line includes `TaxLine` objects with:
-     - `line`
-     - `label`
-     - `amount`
-     - `citation`
-   - Rule IDs come from `src/taxpilot/knowledge/rules.py` via `cite(rule_id)`
+# 3. Chat interactively
+python -m src.chat                                       # prompts with " -> " suffix
 
-10. Summary phase
-   - `summarize_node` in `graph/nodes.py`
-   - Creates a human-readable summary of the computed return and the major deductions.
-   - This summary is useful both:
-     - while a review is pending
-     - after resuming and recomputing
+# 4. Launch web UI
+python -m src.server                                     # http://127.0.0.1:8000
+python -m src.server --port 8080 --ckpt out/ckpt.pt
 
-11. Audit scoring
-   - `audit_node` in `graph/nodes.py`
-   - Calls `src/taxpilot/audit/scorer.py`
-   - `score_return(tax_return, income, deductions, extractions)`:
-     - checks TDS vs Form 26AS
-     - checks deductions at or near cap
-     - checks large deduction ratios
-     - checks large donation claims
-     - checks review-needed deductions
-     - checks low-confidence extractions
-     - checks large refund relative to income
-   - Returns `AuditRisk(score, band, flags)` with weighted red flags.
-   - The audit score is a heuristic, not a trained model; it is transparent and explainable.
+# 5. Run tests
+python -m pytest -q
+```
 
-12. Review gate
-   - `review_gate_node` in `graph/nodes.py`
-   - This is the human interrupt point.
-   - The gate raises `interrupt()` when:
-     - risk is above threshold
-     - refund or payable exceeds threshold
-     - confidence is low
-     - deductions need confirmation
-     - the return is out of scope for the deterministic engine path
-   - `pipeline.pending_review(thread_id)` fetches the review payload.
-   - This is the “pause and wait for human approval” loop.
+---
 
-13. Human correction flow
-   - Client calls `GET /pending/{thread_id}` to inspect reasons.
-   - Client then calls `POST /resume` with `Correction` objects.
-   - `pipeline.resume()`:
-     - gets graph state for the thread
-     - sends `Command(resume={"corrections": [...]})`
-   - Builder routes via `after_review()`:
-     - if `recompute` was triggered, returns to `calculate`
-     - otherwise goes to `report`
+## End-to-End Flow Diagram
 
-14. Report generation
-   - `report_node` in `graph/nodes.py`
-   - Uses the computed `TaxReturn`, citations, and deductions to produce plain-language narrative.
-   - It writes `state["report"]`.
-   - The repo explicitly enforces the rule: “The LLM reads, retrieves, explains, and spots anomalies; the deterministic engine computes the numbers.”
+```
+USER INPUT
+    ↓
+[Tokenization Phase]
+  text → CharTokenizer.encode() / WordTokenizer.encode()
+         → token IDs (1D array)
+    ↓
+[Training Phase]
+  Token IDs → (Embedding + Positional) → Dropout
+             → N × Transformer Blocks
+                - LayerNorm → CausalSelfAttention → +residual
+                - LayerNorm → MLP → +residual
+             → Final LayerNorm → LM Head (tied weights)
+             → Logits [B, T, vocab_size]
+             ↓
+          Cross-entropy loss vs. ground-truth next token
+             ↓
+          AdamW optimizer (weight-decay groups)
+             ↓
+          Warmup + Cosine LR schedule
+             ↓
+          Gradient clipping + accumulation
+             ↓
+          Checkpoint save (if best validation loss)
+    ↓
+[Inference Phase]
+  1. Load checkpoint (model + tokenizer + config)
+  2. Encode prompt → token IDs
+  3. Initialize sequence with prompt tokens
+  4. For each new token:
+     - Feed context (last block_size tokens) to model
+     - Get logits for last position
+     - Apply temperature scaling
+     - Apply top-k filtering (if top_k > 0)
+     - Sample via multinomial(softmax(logits))
+     - Append token, repeat until max_new_tokens reached
+  5. Decode token IDs → text
+    ↓
+[Output Delivery]
+  CLI:  print text directly (sample.py, chat.py)
+  Web:  POST /api/generate → JSON {prompt, completion, generated} → render in HTML
+```
 
-15. Guardrail output
-   - `guardrail_output_node` in `graph/nodes.py`
-   - Calls `src/taxpilot/guardrails/pipeline.py`
-   - `Guardrails.check_output(report, tax_return, deductions, use_llm=True)`
-   - Layer sequence:
-     - `shape`
-     - `injection`
-     - `pii_inventory`
-     - `figure_integrity`
-     - `citation_grounding`
-     - `pii_redaction`
-     - `disclaimer`
-     - optional `output_review`
-   - The key invariant is `figure_integrity`:
-     - all rupee figures in the narrative must be drawn from:
-       - engine output
-       - published constants
-       - grounded deduction values
-     - if the report invents any `₹` values, it is rejected.
-   - PII redaction masks PAN/Aadhaar for display.
-   - A disclaimer is appended to mark it as a draft return.
+---
 
-16. Finalization
-   - `finalize_node` in `graph/nodes.py`
-   - It bundles the state into final structured output.
-   - `pipeline._to_response(...)` packages it into `ReturnResponse`.
-   - Response fields include:
-     - `tax_year`
-     - `regime`
-     - `tax_return`
-     - `audit`
-     - `report`
-     - `llm_summary`
-     - `used_llm`
-     - `citations`
-     - `awaiting_review`
-     - `review_items`
-     - `thread_id`
-     - `guardrails`
-     - `blocked`
-     - `block_message`
-     - `trace`
-     - token counts
-     - latency
+## Key Functions & Methods
 
-Database and LLM interaction map
+### Core Model (`src/model.py`)
 
-- No relational database is used in the app code path.
-- The only “state persistence” is:
-  - in-memory LangGraph checkpointer (`MemorySaver`) for the paused review thread
-  - BM25 in-memory knowledge store for the corpus
-- The actual external ML interaction is through:
-  - `src/taxpilot/llm/client.py`
-  - `LLMClient.complete()`
-  - `LLMClient.complete_json()`
-  - provider switch:
-    - Anthropic via `anthropic.Anthropic(...)`
-    - or Gemini via `get_llm()` selecting the Gemini client when configured
-- Structured model outputs are enforced by JSON-schema validation, so the extractor, classifier, researcher, and guardrails all expect strongly typed data.
-- If `use_llm=False` or no API key is configured, the system runs on deterministic paths only. The README explicitly says the suite and pipeline still work offline.
+| Symbol | Purpose |
+|--------|---------|
+| `NanoGPT.__init__()` | Build embedding layers, blocks, LM head; apply weight tying & GPT-2 scaled init |
+| `NanoGPT.forward(idx, targets)` | Embed tokens + positions, run blocks, compute logits & cross-entropy loss |
+| `NanoGPT.generate(idx, max_new_tokens, temperature, top_k)` | Autoregressively sample tokens with context cropping |
+| `NanoGPT.configure_optimizers()` | Return AdamW with weight-decay groups (2D+ only) |
+| `CausalSelfAttention.forward()` | Multi-head scaled dot-product attention with lower-triangular causal mask |
+| `Block.forward()` | Pre-LayerNorm residuals: `x + attn(ln(x))` and `x + mlp(ln(x))` |
+| `MLP.forward()` | Linear(4×) → GELU → Linear; return with dropout |
 
-What connects each component
+### Tokenization (`src/tokenizer.py`)
 
-- `api/main.py` -> `graph/pipeline.py` -> `graph/builder.py` -> `graph/nodes.py`
-- `graph/nodes.py` -> `extraction/extractor.py` -> `models.py` -> `TaxState`
-- `graph/nodes.py` -> `knowledge/retriever.py` -> `knowledge/store.py` -> `data/corpus`
-- `graph/nodes.py` -> `calc/engine.py` -> `knowledge/rules.py` -> engine outputs
-- `graph/nodes.py` -> `audit/scorer.py` -> review gate
-- `graph/nodes.py` -> `guardrails/pipeline.py` -> final `ReturnResponse`
-- `api/main.py` returns the response to the UI or caller
+| Symbol | Purpose |
+|--------|---------|
+| `CharTokenizer.train(text)` | Extract unique characters, build vocab |
+| `CharTokenizer.encode(s)` | Map each character to its token ID |
+| `CharTokenizer.decode(ids)` | Reverse: token IDs → original characters |
+| `WordTokenizer.train(text)` | Split on whitespace, build vocab with `<unk>` fallback |
+| `build_tokenizer(kind, text)` | Factory to select & train tokenizer by name |
+| `save_tokenizer()` / `load_tokenizer()` | JSON persistence (so inference uses exact training vocab) |
 
-The exact final output contract is a `ReturnResponse` object, not a database row. The UI reads it and shows:
-- summary
-- report
-- sources
-- audit
-- guardrails
-- trace
+### Training (`src/train.py`)
 
-The final artifact is an explainable draft tax return: numbers come from the deterministic engine, explanations and citations come from the retriever and LLM, and the output is checked by guardrails before being returned.
+| Symbol | Purpose |
+|--------|---------|
+| `parse_args()` | CLI parsing; every GPTConfig & TrainConfig field becomes a flag |
+| `main()` | Load/build corpus, model, optimizer; training loop with checkpointing |
+| `estimate_loss()` | Evaluate on train/val splits over `eval_iters` batches |
+| `_save()` | Checkpoint: model state, optimizer state, config, tokenizer, iteration, best_val |
+
+### Data (`src/data.py`)
+
+| Symbol | Purpose |
+|--------|---------|
+| `Corpus.__init__()` | Split tokenized IDs into train/val by fraction |
+| `Corpus.get_batch()` | Sample random contiguous chunks; pin memory on CUDA |
+
+### Inference & Serving
+
+| File | Key Functions |
+|------|---|
+| `inference.py` | `load_model(ckpt_path)` — deserialize checkpoint, build model, return (model, tokenizer, device) |
+| `sample.py` | `main()` — one-shot generation from CLI flags |
+| `chat.py` | `main()` — interactive loop with `" -> "` suffix formatting |
+| `server.py` | `lifespan()` — startup model loading; `health()` — model info; `generate()` — API endpoint |
+
+### Web UI
+
+| File | Role |
+|------|------|
+| `index.html` | USWDS structure; sliders (temperature, top-k, max_tokens); output display |
+| `app.js` | Fetch `/api/health` on load; bind slider outputs; POST to `/api/generate`; render & copy text |
+| `styles.css` | USWDS design tokens, Montserrat font fallback, accessible focus states |
+
+### Testing (`tests/test_nanochat.py`)
+
+| Test | Purpose |
+|------|---------|
+| `test_forward_shapes_and_loss()` | Logits shape matches (B, T, vocab), loss is scalar > 0 |
+| `test_causal_mask_no_future_leak()` | Perturbing position t must not change positions < t |
+| `test_generate_crops_context()` | Generation past block_size does not raise |
+| `test_char_tokenizer_roundtrip()` | Encode then decode recovers original text |
+| `test_word_tokenizer_unk()` | Unknown words map to `<unk>` token |
+| `test_loss_decreases_on_overfit()` | A few optimizer steps reduce loss on tiny corpus |
+| `test_config_overrides_and_roundtrip()` | Config CLI coercion and dict serialization |
+
+---
+
+## Try asking
+
+1. **"How does causal self-attention work in this model and why is it crucial for autoregressive generation?"**
+   — See `CausalSelfAttention.forward()` in `src/model.py` lines 41–78; the lower-triangular mask prevents attending to future tokens.
+
+2. **"What happens during checkpoint save and how does the resume feature preserve the training state?"**
+   — See `_save()` in `src/train.py` lines 189–201 and resume logic in `main()` lines 83–104; saves model weights, optimizer state, config, tokenizer, and iteration counter.
+
+3. **"How do the character and word tokenizers differ, and why does saving/loading the tokenizer matter for inference?"**
+   — See `src/tokenizer.py` lines 23–79; CharTokenizer is reversible (every training char survives), WordTokenizer has a vocab size but needs `<unk>`. Saving ensures inference uses the *exact* training vocab, not a rebuilt one from `data.txt`.
