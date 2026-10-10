@@ -16,10 +16,10 @@ class GPTConfig:
     """Architecture of the causal transformer (a small GPT)."""
 
     vocab_size: int = 256      # filled in from the tokenizer before building
-    block_size: int = 128      # max context length (also caps positional embeddings)
-    n_layer: int = 4
-    n_head: int = 4
-    n_embd: int = 128
+    block_size: int = 256      # max context length (also caps positional embeddings)
+    n_layer: int = 8           # deeper model for better dialogue understanding
+    n_head: int = 8            # more attention heads for richer context
+    n_embd: int = 512          # wider embeddings for better expressiveness
     dropout: float = 0.1
     bias: bool = True          # use bias in Linear/LayerNorm layers
 
@@ -38,22 +38,22 @@ class TrainConfig:
 
     # data / tokenizer
     data_path: str = "data/data.txt"
-    tokenizer: str = "char"        # "char" or "word"
+    tokenizer: str = "word"        # "char" or "word" - word tokenizer better for dialogue
     val_fraction: float = 0.1
 
     # optimisation
     batch_size: int = 32
     grad_accum_steps: int = 1      # effective batch = batch_size * grad_accum_steps
-    max_iters: int = 5000
-    learning_rate: float = 3e-4
+    max_iters: int = 20000         # longer training for larger model convergence
+    learning_rate: float = 5e-4
     weight_decay: float = 0.1
     beta1: float = 0.9
     beta2: float = 0.95
     grad_clip: float = 1.0
 
     # learning-rate schedule (warmup then cosine decay)
-    warmup_iters: int = 100
-    lr_decay_iters: int = 5000     # usually == max_iters
+    warmup_iters: int = 200        # increased warmup for larger model
+    lr_decay_iters: int = 20000    # usually == max_iters
     min_lr: float = 3e-5
 
     # evaluation / checkpointing

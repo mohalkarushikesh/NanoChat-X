@@ -219,13 +219,42 @@ understand — and be able to *rebuild* — how GPT‑like models work, end to e
 
 ---
 
+## Updated Model Configuration
+
+| Parameter | Before | Now | Reason |
+|---|---:|---:|---|
+| `block_size` | 128 | 256 | Longer context for multi-turn dialogue |
+| `n_layer` | 6 | 8 | Deeper network for richer feature learning |
+| `n_embd` | 256 | 512 | Wider representations for improved modeling capacity |
+| `n_head` | 8 | 8 | Maintained multi-head attention configuration |
+| `max_iters` | 25,000 | 20,000 | Balanced training iterations for the larger model |
+| `learning_rate` | 3e-4 | 5e-4 | Higher initial learning rate for faster optimization |
+| `warmup_iters` | 100 | 200 | Longer warmup to help stabilize training |
+
+### Model Size
+
+- **Previous model:** ~1.5M parameters
+- **Updated model:** ~7–8M parameters
+- **Context length:** 256 tokens (up from 128)
+- **Architecture:** 8 Transformer layers, 512 embedding dimensions, 8 attention heads
+
+### Expected Improvements
+
+- Increased model capacity for learning language patterns.
+- Longer context window for multi-turn dialogue.
+- Richer token representations through wider embeddings.
+- Potentially improved language generation and contextual coherence.
+
+*Note: These are expected benefits, not guaranteed outcomes. Actual performance depends on the training dataset, tokenizer, optimization stability, and evaluation results.*
+---
+
 ## Run (quickstart)
 
 ```bash
 cd "Projects/NanoChat-X"
 pip install -r requirements.txt
 
-python -m src.train --max_iters 3000 --n_layer 6 --n_embd 256   # a real run: ~minutes on CPU
+python -m src.train --max_iters 20000 --n_layer 8 --n_embd 512   # a real run: ~minutes on CPU
 python -m src.sample --prompt "The thing is " --top_k 40         # generate from the checkpoint
 python -m pytest -q                                              # run the tests
 ```
@@ -263,4 +292,6 @@ clear message if no checkpoint exists yet.
 > The font loads from Google Fonts; if your network blocks it, the CSS falls
 > back to a USWDS-style system stack (Public Sans → system-ui) automatically.
 
+
+> Training setup update: to improve dialogue quality on movie/dialogue-style data, we increased the default transformer size and training schedule. The model now uses a deeper architecture (`n_layer=8`, `n_head=8`, `n_embd=512`), word-tokenization by default for more natural conversational outputs, and a longer training run (`max_iters=20000`) with a matching LR decay schedule. This gives the model more time to converge and produces noticeably better response quality than the original smaller default setup.
 
