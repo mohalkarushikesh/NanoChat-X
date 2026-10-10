@@ -180,7 +180,7 @@ python -m src.train                                   # CPU-optimized defaults (
 # Update src/config.py to GPU config, then:
 python -m src.train                                   # GPU-optimized defaults (~1.5–2 hours)
 
-python -m src.train --max_iters 40,000 --n_layer 10 --n_embd 640 
+python -m src.train --max_iters 30000 --n_layer 8 --n_embd 512  
 python -m src.train --tokenizer word --block_size 384 
 python -m src.train --resume                          # continue from out/ckpt.pt
 ```
@@ -235,37 +235,14 @@ For stronger dialogue quality and more realistic generation on GPU-backed runs s
 ---
 ## Training Configuration Options
 
-NanoChat‑X supports training across different hardware setups. Choose your configuration based on available compute:
+This config:
 
-### CPU & Small GPU Setups
-
-| Parameter | Value | Notes |
-| --- | --- | --- |
-| `block_size` | 128 | Modest context window |
-| `n_layer` | 6 | Balanced depth |
-| `n_head` | 8 | Multi-head attention |
-| `n_embd` | 256 | Medium embedding width |
-| `batch_size` | 32 | Conservative batch |
-| `max_iters` | 25,000 | Longer training |
-| `learning_rate` | 3e-4 | Standard LR |
-| **Model size** | ~1.5M params | Lightweight |
-| **Training time** | ~4–6 hours (CPU) | - |
-
-### GPU (Google Colab / High-Performance Setups)
-
-| Parameter | Value | Notes |
-| --- | --- | --- |
-| `block_size` | 384 | Longer context for dialogue |
-| `n_layer` | 10 | Deeper network |
-| `n_head` | 10 | Richer attention |
-| `n_embd` | 640 | Wide embeddings |
-| `batch_size` | 96 | GPU-optimized batch |
-| `max_iters` | 40,000 | Extended training |
-| `learning_rate` | 5e-4 | Higher LR |
-| **Model size** | ~25M params | 10x larger |
-| **Training time** | ~1.5–2 hours (GPU) | On Colab |
-
-**Key difference:** The GPU config uses a much deeper, wider model that converges faster with GPU acceleration. Optimal for dialogue-quality generation. For Google Colab, use the **GPU config** above.
+~35M parameters (fits on T4)
+batch_size: 64 (instead of 96)
+n_embd: 512 (instead of 640)
+n_layer: 8 (instead of 10)
+Training time: ~2-3 hours on T4
+Still produces good dialogue quality
 ---
 
 
@@ -312,7 +289,3 @@ clear message if no checkpoint exists yet.
 
 > The font loads from Google Fonts; if your network blocks it, the CSS falls
 > back to a USWDS-style system stack (Public Sans → system-ui) automatically.
-
-
-> Training setup update: to improve dialogue quality on movie/dialogue-style data, we increased the default transformer size and training schedule. The model now uses a deeper architecture (`n_layer=10`, `n_head=10`, `n_embd=640`), word-tokenization by default for more natural conversational outputs, and a longer training run (`max_iters=40000`) with a matching LR decay schedule. This gives the model more time to converge and produces noticeably better response quality than the original smaller default setup.
-

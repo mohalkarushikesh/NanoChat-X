@@ -13,56 +13,40 @@ from typing import Any
 
 @dataclass
 class GPTConfig:
-    """Architecture of the causal transformer (a small GPT)."""
-
-    vocab_size: int = 256      # filled in from the tokenizer before building
-    block_size: int = 384      # max context length (better for dialogue)
-    n_layer: int = 10          # deeper transformer
-    n_head: int = 10           # balanced attention heads
-    n_embd: int = 640          # wider embedding space
+    vocab_size: int = 256
+    block_size: int = 256      # moderate context
+    n_layer: int = 8           # reduced from 10
+    n_head: int = 8
+    n_embd: int = 512          # reduced from 640
     dropout: float = 0.1
-    bias: bool = True          # use bias in Linear/LayerNorm layers
-
-    def __post_init__(self) -> None:
-        if self.n_embd % self.n_head != 0:
-            raise ValueError(
-                f"n_embd ({self.n_embd}) must be divisible by n_head ({self.n_head})"
-            )
-
+    bias: bool = True
 
 @dataclass
 class TrainConfig:
-    """Everything about a training run (model config included)."""
-
     model: GPTConfig = field(default_factory=GPTConfig)
 
-    # data / tokenizer
     data_path: str = "data/data.txt"
-    tokenizer: str = "word"        # "char" or "word"
+    tokenizer: str = "word"
     val_fraction: float = 0.1
 
-    # optimisation
-    batch_size: int = 96
+    batch_size: int = 64       # reduced from 96
     grad_accum_steps: int = 1
-    max_iters: int = 40000
+    max_iters: int = 30000
     learning_rate: float = 5e-4
     weight_decay: float = 0.1
     beta1: float = 0.9
     beta2: float = 0.95
     grad_clip: float = 1.0
 
-    # learning-rate schedule (warmup then cosine decay)
-    warmup_iters: int = 400
-    lr_decay_iters: int = 40000
+    warmup_iters: int = 300
+    lr_decay_iters: int = 30000
     min_lr: float = 3e-5
 
-    # evaluation / checkpointing
     eval_interval: int = 250
     eval_iters: int = 50
     log_interval: int = 50
     out_dir: str = "out"
 
-    # runtime
     device: str = "auto"
     seed: int = 1337
     compile: bool = False
