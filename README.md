@@ -223,14 +223,6 @@ Generation samples one token at a time, always feeding back the last
 NanoChat‑X is a **learning project**, not a production chatbot: a hands‑on way to
 understand — and be able to *rebuild* — how GPT‑like models work, end to end.
 
----
-
-## Updated Model Configuration
-
-For stronger dialogue quality and more realistic generation on GPU-backed runs such as Google Colab, the project is also compatible with a larger transformer configuration. In practice, a deeper model with a higher embedding size, longer context window, and longer training schedule can produce noticeably better conversational output than the original default setup. For example, using a word tokenizer with block_size=384, n_layer=10, n_head=10, n_embd=640, batch_size=96, and max_iters=40000 provides a significantly more capable model for movie/dialogue-style text. This setup is especially useful when training in a notebook environment with GPU access, where the larger model can converge much faster and learn richer contextual patterns than the small CPU-oriented defaults.
-
-*Note: These are expected benefits, not guaranteed outcomes. Actual performance depends on the training dataset, tokenizer, optimization stability, and evaluation results.*
----
 
 ---
 ## Training Configuration Options
