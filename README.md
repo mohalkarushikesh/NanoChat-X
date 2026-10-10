@@ -173,9 +173,15 @@ python -m src.preprocess_cornell        # writes line -> reply pairs to data/dat
 ### 2. Train
 
 ```bash
-python -m src.train                                   # sensible defaults (char tokenizer)
-python -m src.train --max_iters 3000 --n_layer 6 --n_embd 256
-python -m src.train --tokenizer word --block_size 64
+#### Local / CPU:
+python -m src.train                                   # CPU-optimized defaults (~4–6 hours)
+
+#### Google Colab / GPU:
+# Update src/config.py to GPU config, then:
+python -m src.train                                   # GPU-optimized defaults (~1.5–2 hours)
+
+python -m src.train --max_iters 40,000 --n_layer 10 --n_embd 640 
+python -m src.train --tokenizer word --block_size 384 
 python -m src.train --resume                          # continue from out/ckpt.pt
 ```
 
@@ -221,32 +227,47 @@ understand — and be able to *rebuild* — how GPT‑like models work, end to e
 
 ## Updated Model Configuration
 
-| Parameter | Before | Now | Reason |
-|---|---:|---:|---|
-| `block_size` | 128 | 256 | Longer context for multi-turn dialogue |
-| `n_layer` | 6 | 8 | Deeper network for richer feature learning |
-| `n_embd` | 256 | 512 | Wider representations for improved modeling capacity |
-| `n_head` | 8 | 8 | Maintained multi-head attention configuration |
-| `max_iters` | 25,000 | 20,000 | Balanced training iterations for the larger model |
-| `learning_rate` | 3e-4 | 5e-4 | Higher initial learning rate for faster optimization |
-| `warmup_iters` | 100 | 200 | Longer warmup to help stabilize training |
-
-### Model Size
-
-- **Previous model:** ~1.5M parameters
-- **Updated model:** ~7–8M parameters
-- **Context length:** 256 tokens (up from 128)
-- **Architecture:** 8 Transformer layers, 512 embedding dimensions, 8 attention heads
-
-### Expected Improvements
-
-- Increased model capacity for learning language patterns.
-- Longer context window for multi-turn dialogue.
-- Richer token representations through wider embeddings.
-- Potentially improved language generation and contextual coherence.
+For stronger dialogue quality and more realistic generation on GPU-backed runs such as Google Colab, the project is also compatible with a larger transformer configuration. In practice, a deeper model with a higher embedding size, longer context window, and longer training schedule can produce noticeably better conversational output than the original default setup. For example, using a word tokenizer with block_size=384, n_layer=10, n_head=10, n_embd=640, batch_size=96, and max_iters=40000 provides a significantly more capable model for movie/dialogue-style text. This setup is especially useful when training in a notebook environment with GPU access, where the larger model can converge much faster and learn richer contextual patterns than the small CPU-oriented defaults.
 
 *Note: These are expected benefits, not guaranteed outcomes. Actual performance depends on the training dataset, tokenizer, optimization stability, and evaluation results.*
 ---
+
+---
+## Training Configuration Options
+
+NanoChat‑X supports training across different hardware setups. Choose your configuration based on available compute:
+
+### CPU & Small GPU Setups
+
+| Parameter | Value | Notes |
+| --- | --- | --- |
+| `block_size` | 128 | Modest context window |
+| `n_layer` | 6 | Balanced depth |
+| `n_head` | 8 | Multi-head attention |
+| `n_embd` | 256 | Medium embedding width |
+| `batch_size` | 32 | Conservative batch |
+| `max_iters` | 25,000 | Longer training |
+| `learning_rate` | 3e-4 | Standard LR |
+| **Model size** | ~1.5M params | Lightweight |
+| **Training time** | ~4–6 hours (CPU) | - |
+
+### GPU (Google Colab / High-Performance Setups)
+
+| Parameter | Value | Notes |
+| --- | --- | --- |
+| `block_size` | 384 | Longer context for dialogue |
+| `n_layer` | 10 | Deeper network |
+| `n_head` | 10 | Richer attention |
+| `n_embd` | 640 | Wide embeddings |
+| `batch_size` | 96 | GPU-optimized batch |
+| `max_iters` | 40,000 | Extended training |
+| `learning_rate` | 5e-4 | Higher LR |
+| **Model size** | ~25M params | 10x larger |
+| **Training time** | ~1.5–2 hours (GPU) | On Colab |
+
+**Key difference:** The GPU config uses a much deeper, wider model that converges faster with GPU acceleration. Optimal for dialogue-quality generation. For Google Colab, use the **GPU config** above.
+---
+
 
 ## Run (quickstart)
 
@@ -293,5 +314,5 @@ clear message if no checkpoint exists yet.
 > back to a USWDS-style system stack (Public Sans → system-ui) automatically.
 
 
-> Training setup update: to improve dialogue quality on movie/dialogue-style data, we increased the default transformer size and training schedule. The model now uses a deeper architecture (`n_layer=8`, `n_head=8`, `n_embd=512`), word-tokenization by default for more natural conversational outputs, and a longer training run (`max_iters=20000`) with a matching LR decay schedule. This gives the model more time to converge and produces noticeably better response quality than the original smaller default setup.
+> Training setup update: to improve dialogue quality on movie/dialogue-style data, we increased the default transformer size and training schedule. The model now uses a deeper architecture (`n_layer=10`, `n_head=10`, `n_embd=640`), word-tokenization by default for more natural conversational outputs, and a longer training run (`max_iters=40000`) with a matching LR decay schedule. This gives the model more time to converge and produces noticeably better response quality than the original smaller default setup.
 

@@ -16,10 +16,10 @@ class GPTConfig:
     """Architecture of the causal transformer (a small GPT)."""
 
     vocab_size: int = 256      # filled in from the tokenizer before building
-    block_size: int = 256      # max context length (also caps positional embeddings)
-    n_layer: int = 8           # deeper model for better dialogue understanding
-    n_head: int = 8            # more attention heads for richer context
-    n_embd: int = 512          # wider embeddings for better expressiveness
+    block_size: int = 384      # max context length (better for dialogue)
+    n_layer: int = 10          # deeper transformer
+    n_head: int = 10           # balanced attention heads
+    n_embd: int = 640          # wider embedding space
     dropout: float = 0.1
     bias: bool = True          # use bias in Linear/LayerNorm layers
 
@@ -38,13 +38,13 @@ class TrainConfig:
 
     # data / tokenizer
     data_path: str = "data/data.txt"
-    tokenizer: str = "word"        # "char" or "word" - word tokenizer better for dialogue
+    tokenizer: str = "word"        # "char" or "word"
     val_fraction: float = 0.1
 
     # optimisation
-    batch_size: int = 32
-    grad_accum_steps: int = 1      # effective batch = batch_size * grad_accum_steps
-    max_iters: int = 20000         # longer training for larger model convergence
+    batch_size: int = 96
+    grad_accum_steps: int = 1
+    max_iters: int = 40000
     learning_rate: float = 5e-4
     weight_decay: float = 0.1
     beta1: float = 0.9
@@ -52,29 +52,27 @@ class TrainConfig:
     grad_clip: float = 1.0
 
     # learning-rate schedule (warmup then cosine decay)
-    warmup_iters: int = 200        # increased warmup for larger model
-    lr_decay_iters: int = 20000    # usually == max_iters
+    warmup_iters: int = 400
+    lr_decay_iters: int = 40000
     min_lr: float = 3e-5
 
     # evaluation / checkpointing
     eval_interval: int = 250
-    eval_iters: int = 50           # batches averaged per loss estimate
+    eval_iters: int = 50
     log_interval: int = 50
     out_dir: str = "out"
 
     # runtime
-    device: str = "auto"           # "auto" -> cuda if available else cpu
+    device: str = "auto"
     seed: int = 1337
-    compile: bool = False          # torch.compile (off by default for portability)
+    compile: bool = False
 
     def resolved_device(self) -> str:
         if self.device != "auto":
             return self.device
         import torch
-
         return "cuda" if torch.cuda.is_available() else "cpu"
 
-    # --- (de)serialisation helpers used by the checkpoint --------------------
     def to_dict(self) -> dict[str, Any]:
         d = asdict(self)
         return d
