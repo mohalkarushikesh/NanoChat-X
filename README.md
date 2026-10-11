@@ -11,6 +11,17 @@ part of a GPT‑like model is visible in a few hundred lines.
 
 ---
 
+## Result 
+
+**INDEED I HAVE BEEN SUCEDDED!**
+
+![From data](data.png)
+
+---
+
+![Result](result.png)
+
+
 ## What's inside (the "NanoScope" core-DL build)
 
 | Piece | Where | Notes |
@@ -290,3 +301,4 @@ clear message if no checkpoint exists yet.
 ## Train and Validation Loss 
 
 <img src="train_val_loss.png" alt="Train & Validation Loss" width="1600" height="500" loading="lazy">
+

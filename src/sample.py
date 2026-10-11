@@ -1,7 +1,7 @@
 """One-shot text generation from a trained checkpoint.
 
-    python -m src.sample --prompt "The thing is " --max_new_tokens 200
-    python -m src.sample --prompt "Hello" --temperature 0.8 --top_k 40 --num_samples 3
+    python -m src.sample --prompt "The thing is " --max_new_tokens 2
+    python -m src.sample --prompt "Hello" --max_new_tokens 2 --temperature 0.2 --top_k 1 --num_samples 1
 """
 
 from __future__ import annotations
