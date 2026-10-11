@@ -31,11 +31,11 @@ class LayerNorm(nn.Module):
 
     def __init__(self, ndim: int, bias: bool):
         super().__init__()
-        self.weight = nn.Parameter(torch.ones(ndim))
-        self.bias = nn.Parameter(torch.zeros(ndim)) if bias else None
+        self.weight = nn.Parameter(torch.ones(ndim))                        # Learns how much to scale values
+        self.bias = nn.Parameter(torch.zeros(ndim)) if bias else None       # optionally learns how much to shift values
 
     def forward(self, x):
-        return F.layer_norm(x, self.weight.shape, self.weight, self.bias, 1e-5)
+        return F.layer_norm(x, self.weight.shape, self.weight, self.bias, 1e-5)      # Performs Normalizaton; Why? It helps to stabalize learning
 
 
 class CausalSelfAttention(nn.Module):
@@ -45,11 +45,11 @@ class CausalSelfAttention(nn.Module):
         super().__init__()
         self.n_head = config.n_head
         self.n_embd = config.n_embd
-        self.head_dim = config.n_embd // config.n_head
+        self.head_dim = config.n_embd // config.n_head                                # Instead of learning one attention pattern, the model uses multiple heads.
 
         # One projection produces query, key and value for every head at once.
-        self.c_attn = nn.Linear(config.n_embd, 3 * config.n_embd, bias=config.bias)
-        self.c_proj = nn.Linear(config.n_embd, config.n_embd, bias=config.bias)
+        self.c_attn = nn.Linear(config.n_embd, 3 * config.n_embd, bias=config.bias)   # single linear layer produces 3 vectors: Q, K, V
+        self.c_proj = nn.Linear(config.n_embd, config.n_embd, bias=config.bias)       # The heads are combined and passed through c_proj.
         self.attn_dropout = nn.Dropout(config.dropout)
         self.resid_dropout = nn.Dropout(config.dropout)
         self.dropout = config.dropout
@@ -68,8 +68,8 @@ class CausalSelfAttention(nn.Module):
         v = v.view(B, T, self.n_head, self.head_dim).transpose(1, 2)
 
         # Scaled dot-product attention, written out for clarity.
-        att = (q @ k.transpose(-2, -1)) / math.sqrt(self.head_dim)  # (B, nh, T, T)
-        att = att.masked_fill(self.mask[:, :, :T, :T] == 0, float("-inf"))
+        att = (q @ k.transpose(-2, -1)) / math.sqrt(self.head_dim)  # (B, nh, T, T)       # This calculates how strongly each token should attend to other tokens.
+        att = att.masked_fill(self.mask[:, :, :T, :T] == 0, float("-inf"))                # The causal mask prevents a token from looking at future tokens.
         att = F.softmax(att, dim=-1)
         att = self.attn_dropout(att)
         y = att @ v                                                # (B, nh, T, head_dim)
@@ -78,17 +78,17 @@ class CausalSelfAttention(nn.Module):
         return self.resid_dropout(self.c_proj(y))
 
 
-class MLP(nn.Module):
+class MLP(nn.Module):                                              # The MLP processes each token's representation independently.                                   
     """Position-wise feed-forward network (the transformer's 4x expansion)."""
 
     def __init__(self, config: GPTConfig):
         super().__init__()
         self.c_fc = nn.Linear(config.n_embd, 4 * config.n_embd, bias=config.bias)
-        self.c_proj = nn.Linear(4 * config.n_embd, config.n_embd, bias=config.bias)
+        self.c_proj = nn.Linear(4 * config.n_embd, config.n_embd, bias=config.bias)     
         self.dropout = nn.Dropout(config.dropout)
 
     def forward(self, x):
-        return self.dropout(self.c_proj(F.gelu(self.c_fc(x))))
+        return self.dropout(self.c_proj(F.gelu(self.c_fc(x))))     # Why? Attention gathers information from other tokens; the MLP processes that information.
 
 
 class Block(nn.Module):
@@ -102,9 +102,9 @@ class Block(nn.Module):
         self.mlp = MLP(config)
 
     def forward(self, x):
-        x = x + self.attn(self.ln_1(x))
-        x = x + self.mlp(self.ln_2(x))
-        return x
+        x = x + self.attn(self.ln_1(x))     # 1st block: Normalize → attention → add the original input.  
+        x = x + self.mlp(self.ln_2(x))      # 2nd block: Normalize → MLP → add the previous result 
+        return x                            # These are called pre-LayerNorm residual blocks.
 
 
 class NanoGPT(nn.Module):
@@ -125,7 +125,8 @@ class NanoGPT(nn.Module):
         )
         self.lm_head = nn.Linear(config.n_embd, config.vocab_size, bias=False)
         # Weight tying: the input embedding and output projection share weights.
-        self.transformer.wte.weight = self.lm_head.weight
+        self.transformer.wte.weight = self.lm_head.weight           # The token embeddng matrix is shared with output projection.
+                                                                    # Benefit: Fewer parameters and potentially better use of learned token representations.
 
         self.apply(self._init_weights)
         # Scaled init for the residual projections (GPT-2 trick).
@@ -153,36 +154,36 @@ class NanoGPT(nn.Module):
             )
         pos = torch.arange(0, T, dtype=torch.long, device=idx.device)
 
-        tok_emb = self.transformer.wte(idx)   # (B, T, n_embd)
-        pos_emb = self.transformer.wpe(pos)   # (T, n_embd), broadcasts over batch
+        tok_emb = self.transformer.wte(idx)   # (B, T, n_embd)                          # Token embedding: Represents what each token is.
+        pos_emb = self.transformer.wpe(pos)   # (T, n_embd), broadcasts over batch      # Positional embedding: Represents where each token occurs.
         x = self.transformer.drop(tok_emb + pos_emb)
-        for block in self.transformer.h:
+        for block in self.transformer.h:                                                # The output of one block becomes the input of the next.
             x = block(x)
         x = self.transformer.ln_f(x)
 
-        logits = self.lm_head(x)              # (B, T, vocab_size)
+        logits = self.lm_head(x)              # (B, T, vocab_size)                      # The final linear layer converts each token representation into scores for every token in the vocabulary.
         loss = None
         if targets is not None:
-            loss = F.cross_entropy(
-                logits.view(-1, logits.size(-1)), targets.view(-1), ignore_index=-1
+            loss = F.cross_entropy(                                                     # Calculate the training loss 
+                logits.view(-1, logits.size(-1)), targets.view(-1), ignore_index=-1     # The loss compares predicted token scores with the correct target token
             )
-        return logits, loss
-
-    def configure_optimizers(self, weight_decay, learning_rate, betas):
+        return logits, loss                                                             # These scores called as logits 
+                                                                                        # During training, backpropagation and the optimizer adjust the model's parameters to reduce this loss.
+    def configure_optimizers(self, weight_decay, learning_rate, betas):                 
         """AdamW with weight decay only on 2-D+ tensors (matmuls/embeddings)."""
-        decay, no_decay = [], []
+        decay, no_decay = [], []                                                        # The code groups parameters into two categories:
         for p in self.parameters():
             if not p.requires_grad:
                 continue
             (decay if p.dim() >= 2 else no_decay).append(p)
         groups = [
-            {"params": decay, "weight_decay": weight_decay},
-            {"params": no_decay, "weight_decay": 0.0},
+            {"params": decay, "weight_decay": weight_decay},                            # The parameter with the two or more diamentions, such as weight matrices
+            {"params": no_decay, "weight_decay": 0.0},                                  # No weight decay: One-dimentional parameters, such as biases and LayerNorm scales 
         ]
         return torch.optim.AdamW(groups, lr=learning_rate, betas=betas)
 
     @torch.no_grad()
-    def generate(self, idx, max_new_tokens, temperature=1.0, top_k=None, eos_id=None):
+    def generate(self, idx, max_new_tokens, temperature=1.0, top_k=None, eos_id=None):  # generake new tokens  
         """Autoregressively sample tokens, cropping context to block_size."""
         self.eval()
         for _ in range(max_new_tokens):
