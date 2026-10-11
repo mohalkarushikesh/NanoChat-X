@@ -156,6 +156,11 @@ Where each stage lives in the code:
 
 ---
 
+## Model Architecture 
+
+<img src="model_arch.png" alt="Model Architecture" width="850" height="1400" loading="lazy">
+---
+
 ## Getting started
 
 ```bash
@@ -281,3 +286,7 @@ clear message if no checkpoint exists yet.
 
 > The font loads from Google Fonts; if your network blocks it, the CSS falls
 > back to a USWDS-style system stack (Public Sans → system-ui) automatically.
+
+## Train and Validation Loss 
+
+<img src="train_val_loss.png" alt="Train & Validation Loss" width="1600" height="500" loading="lazy">
